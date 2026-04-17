@@ -1,7 +1,7 @@
 """
 文本引导图像语义分割 — Gradio 最小 Demo（位于 system/，与训练代码分离）。
 
-在 ris_mvp 根目录执行:
+在项目根目录执行:
   pip install -r system/requirements-demo.txt
   python system/gradio_app.py
 

@@ -16,7 +16,7 @@ try:
     import clip
 except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
-        "缺少 OpenAI CLIP Python 包（`import clip`）。在 ris_mvp 根目录执行:\n"
+        "缺少 OpenAI CLIP Python 包（`import clip`）。在项目根目录执行:\n"
         "  pip install openai-clip\n"
         "或: pip install -r system/requirements-demo.txt\n"
         "（需已安装 torch / torchvision。）"
@@ -27,7 +27,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-# system/ 的上一级为 ris_mvp 项目根（含 models、train.py、result/）
+# system/ 的上一级为项目根（含 models、train.py、result/）
 _SYSTEM_DIR = Path(__file__).resolve().parent
 _RIS_ROOT = _SYSTEM_DIR.parent
 if str(_RIS_ROOT) not in sys.path:
@@ -43,8 +43,17 @@ _CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
 
 
 def default_checkpoint_path() -> str:
-    """默认权重（相对 ris_mvp/result）；可按毕设交付路径修改。"""
-    return str(_RIS_ROOT / "result" / "checkpoints_miou10_20260414_215059" / "best.pt")
+    """在 result/**/best.pt 中自动选一个（优先名称含 v33、否则取最近修改）；无权重时返回空串。"""
+    result = _RIS_ROOT / "result"
+    if not result.is_dir():
+        return ""
+    paths = list(result.glob("**/best.pt"))
+    if not paths:
+        return ""
+    v33 = [p for p in paths if "v33" in p.as_posix().lower()]
+    pool = v33 if v33 else paths
+    best = max(pool, key=lambda p: p.stat().st_mtime)
+    return str(best.resolve())
 
 
 def _image_transform(image_size: int) -> transforms.Compose:
@@ -80,8 +89,13 @@ def load_model_bundle(
     device: Optional[str] = None,
 ) -> Tuple[nn.Module, str, int, Dict[str, Any]]:
     """加载权重与 CLIP，返回 (model, device, image_size, ckpt_meta)。"""
+    path = (checkpoint_path or "").strip()
+    if not path:
+        raise FileNotFoundError("未指定 checkpoint 路径（请填写 best.pt / last.pt）")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"找不到权重文件: {path}")
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    ckpt = torch.load(path, map_location=device, weights_only=False)
     args_dict: Dict[str, Any] = dict(ckpt.get("args") or {})
     clip_name = str(args_dict.get("clip_model", "ViT-B/32"))
     unfreeze_last = int(args_dict.get("clip_unfreeze_last", 0))
@@ -101,7 +115,7 @@ def load_model_bundle(
     model.eval()
 
     meta = {
-        "checkpoint": os.path.abspath(checkpoint_path),
+        "checkpoint": os.path.abspath(path),
         "epoch": ckpt.get("epoch"),
         "best_val_miou": ckpt.get("best_val_miou", ckpt.get("best_val_iou")),
         "image_size": image_size,

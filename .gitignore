@@ -12,5 +12,6 @@ __pycache__/
 # 训练产出与权重（体积大）
 result/
 
-# 本地 RefCOCO 数据根（仅保留索引与代码；数据请自备或从发布页获取）
-refcoco_ready/
+# RefCOCO 图像与掩码体量大，勿提交；索引 JSON 放在 refcoco_ready/splits/ 可提交
+refcoco_ready/images/
+refcoco_ready/masks/

@@ -1,7 +1,7 @@
 """
 文本引导图像语义分割 — Streamlit 界面（the_one.docx UI + second.docx 中文指代）。
 
-在 ris_mvp 根目录执行:
+在项目根目录执行:
   pip install -r system/requirements-demo.txt
   streamlit run system/streamlit_app.py
 
@@ -20,7 +20,7 @@ from PIL import Image
 
 _SYSTEM_DIR = Path(__file__).resolve().parent
 _RIS_ROOT = _SYSTEM_DIR.parent
-# 与 ris_mvp 同级的 train/（例如 D:\...\CUDA\test\train\pytorch_model.bin）；未设置 ZH_EN_MT_MODEL 时默认使用该目录。
+# 与项目根同级的 train/（例如 .../CUDA/test/train/pytorch_model.bin）；未设置 ZH_EN_MT_MODEL 时默认使用该目录。
 _DEFAULT_ZH_MT_DIR = _RIS_ROOT.parent / "train"
 if _DEFAULT_ZH_MT_DIR.is_dir() and (
     (_DEFAULT_ZH_MT_DIR / "pytorch_model.bin").is_file()
@@ -49,9 +49,16 @@ def _pil_png_bytes(img: Image.Image) -> bytes:
 
 
 def _load_demo_presets() -> List[Tuple[str, Path, str, str]]:
-    """(标签, 路径, 中文示例, 英文示例)。不存在则跳过。"""
+    """(标签, 路径, 中文示例, 英文示例)。优先内置 demo_refcoco；有完整 refcoco_ready 时用示例图。"""
+    demo_img = _RIS_ROOT / "demo_refcoco" / "images" / "sample.jpg"
     root = _RIS_ROOT / "refcoco_ready"
     cands: List[Tuple[str, Path, str, str]] = [
+        (
+            "内置示例(demo_refcoco)",
+            demo_img,
+            "画面中心的物体",
+            "the object in the center",
+        ),
         (
             "示例1-581857",
             root / "images" / "COCO_train2014_000000581857.jpg",
@@ -144,7 +151,7 @@ def _apply_demo_preset(index: int) -> None:
     """在按钮 on_click 中执行：先于侧栏 text_input 绑定，可安全写入 session_state.expr。"""
     presets = _load_demo_presets()
     if len(presets) < 2:
-        st.session_state["_demo_flash"] = ("error", "未找到 refcoco_ready 示例图")
+        st.session_state["_demo_flash"] = ("error", "未找到 demo_refcoco 或 refcoco_ready 示例图")
         return
     _, p, zh, en = presets[index]
     st.session_state.work_pil = Image.open(p).convert("RGB")
@@ -228,7 +235,11 @@ def main() -> None:
 
     st.session_state.setdefault("thr", 0.55)
     st.session_state.setdefault("expr", "the lady with the blue shirt")
-    st.session_state.setdefault("ckpt_path", predict.default_checkpoint_path())
+    _def_ckpt = predict.default_checkpoint_path()
+    if _def_ckpt and os.path.isfile(_def_ckpt):
+        st.session_state.setdefault("ckpt_path", _def_ckpt)
+    else:
+        st.session_state.setdefault("ckpt_path", "")
     if "work_pil" not in st.session_state:
         st.session_state.work_pil = None
     if "overlay" not in st.session_state:
@@ -242,6 +253,12 @@ def main() -> None:
     st.session_state.setdefault("ris_keep_largest_cc", False)
 
     st.title("文本引导图像语义分割原型系统")
+    _ckpt_warn = str(st.session_state.get("ckpt_path") or "").strip()
+    if not _ckpt_warn or not os.path.isfile(_ckpt_warn):
+        st.warning(
+            "未检测到可用的 `result/**/best.pt`。请先在侧栏「模型权重路径」填写本地训练得到的 `.pt`，"
+            "或在项目根目录运行 `python train.py ...` 生成权重后再加载。"
+        )
     st.divider()
 
     # —— 左侧控制面板（the_one 3.1.1）——
@@ -355,7 +372,7 @@ def main() -> None:
             with dc2:
                 st.button("示例2", width="stretch", on_click=_apply_demo_preset, args=(1,))
         else:
-            st.caption("未找到 refcoco_ready 示例图；请上传本地图片演示。")
+            st.caption("未找到 demo_refcoco / refcoco_ready 示例图；请上传本地图片演示。")
 
         st.button(
             "一键完整演示",
@@ -465,12 +482,12 @@ def main() -> None:
         st.write(
             """
 本系统为文本引导指代分割（RIS）最小原型：CLIP 文本编码 + 轻量图像编码器 + 解码头。
-默认权重来自 `result/checkpoints_miou10_*/best.pt`（可在侧栏修改路径）。
+默认权重自动选择 `result/**/best.pt`（优先名称含 v33；可在侧栏修改路径）。
 实际验证指标以训练生成的 `val_metrics.jsonl` 为准；界面「best mIoU」为保存 checkpoint 时的记录值。
 
 中文指代（second.docx）：在「中文（离线翻译）」模式下，含汉字的句子会先经词典 / Helsinki-NLP opus-mt-zh-en
 译为英文再送入 CLIP，翻译在 CPU 运行。首次使用需 `pip install -r system/requirements-demo.txt` 并联网下载模型；
-答辩完全离线：若存在与 `ris_mvp` 同级的 `train/` 且内含 `pytorch_model.bin`，应用启动时会自动
+答辩完全离线：若存在与「项目根」同级的 `train/` 且内含 `pytorch_model.bin`，应用启动时会自动
 `setdefault(ZH_EN_MT_MODEL, …)` 指向该目录（与手动设置 `D:\\...\\test\\train` 等价）。其它约定路径与
 `zh_translate` 说明一致；仅分词、缺权重时会报错提示补全，而不会静默改走外网。
 拉取翻译模型时默认使用国内镜像 HF_ENDPOINT=https://hf-mirror.com（若已自行设置 HF_ENDPOINT 则不会覆盖）。

@@ -2,6 +2,8 @@
 
 This is a minimal runnable baseline for text-guided image segmentation.
 
+> **本目录作为 GitHub 仓库根时**：请先阅读 [`GITHUB_SETUP.md`](GITHUB_SETUP.md)；RefCOCO 大图与掩码见 [`refcoco_ready/README_DATA.md`](refcoco_ready/README_DATA.md)。
+
 ## 1) Environment
 
 Use your existing conda env:
