@@ -2,7 +2,7 @@
 
 This is a minimal runnable baseline for text-guided image segmentation.
 
-> **本目录作为 GitHub 仓库根时**：请先阅读 [`GITHUB_SETUP.md`](GITHUB_SETUP.md)；RefCOCO 大图与掩码见 [`refcoco_ready/README_DATA.md`](refcoco_ready/README_DATA.md)。
+> **对外发布 / GitHub**：以子目录 `RIS_Referring-Image-Segmentation-System/` 为仓库根时，请阅读其中 [`GITHUB_SETUP.md`](RIS_Referring-Image-Segmentation-System/GITHUB_SETUP.md)。
 
 ## 1) Environment
 
