@@ -1,0 +1,66 @@
+{
+  "index": "D:\\NVIDIA GPU Computing Toolkit\\CUDA\\test\\ris_mvp\\refcoco_ready\\splits/testA.json",
+  "checkpoint": "D:\\NVIDIA GPU Computing Toolkit\\CUDA\\test\\ris_mvp\\checkpoints\\best.pt",
+  "samples": [
+    {
+      "rank": 0,
+      "index_in_split": 5238,
+      "iou": 0.3868178706257943,
+      "text": "man"
+    },
+    {
+      "rank": 1,
+      "index_in_split": 912,
+      "iou": 0.10160608052140138,
+      "text": "man in center"
+    },
+    {
+      "rank": 2,
+      "index_in_split": 204,
+      "iou": 0.420414831075904,
+      "text": "girl"
+    },
+    {
+      "rank": 3,
+      "index_in_split": 2253,
+      "iou": 0.18699201874154295,
+      "text": "lady on right"
+    },
+    {
+      "rank": 4,
+      "index_in_split": 2006,
+      "iou": 0.246465900051456,
+      "text": "left guy smiling"
+    },
+    {
+      "rank": 5,
+      "index_in_split": 1828,
+      "iou": 0.2999170086708892,
+      "text": "front player"
+    },
+    {
+      "rank": 6,
+      "index_in_split": 1143,
+      "iou": 0.32468014091840225,
+      "text": "boy in black"
+    },
+    {
+      "rank": 7,
+      "index_in_split": 839,
+      "iou": 0.2917342574733913,
+      "text": "top person"
+    },
+    {
+      "rank": 8,
+      "index_in_split": 5543,
+      "iou": 0.22477707643961584,
+      "text": "bottom right corner man"
+    },
+    {
+      "rank": 9,
+      "index_in_split": 4467,
+      "iou": 0.10139549747797214,
+      "text": "left guy"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# 仅交互系统依赖；完整一键在 ris_mvp 根目录执行：
+#   pip install -r system/requirements-demo.txt
+# 需已安装与 CUDA 匹配的 torch / torchvision（训练环境一般已有）。
+# predict.py 使用 `import clip`：由 PyPI 包 openai-clip 提供（与 OpenAI/CLIP 仓库 API 一致）。
+# 若可访问 GitHub，也可改用: pip install git+https://github.com/openai/CLIP.git
+openai-clip>=1.0.1
+gradio>=4.36.0
+streamlit>=1.32.0
+# second.docx：中文指代表达（离线 opus-mt-zh-en，CPU）
+transformers>=4.30.0,<5
+sentencepiece>=0.1.99
+# Marian 分词/规范化（transformers 会提示 Recommended: pip install sacremoses）
+sacremoses>=0.0.53

@@ -1,0 +1,16 @@
+# 离线 Marian 权重（体积大，勿提交）
+models/opus-mt-zh-en/
+
+# Python / 工具
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+
+# 训练产出与权重（体积大）
+result/
+
+# 本地 RefCOCO 数据根（仅保留索引与代码；数据请自备或从发布页获取）
+refcoco_ready/
