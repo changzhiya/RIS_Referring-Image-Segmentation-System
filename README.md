@@ -10,7 +10,7 @@
 |------|------|
 | **CLIP** | 文本编码；训练时可按 `--clip-unfreeze-last` 解冻文本 Transformer 末若干层。 |
 | **分割头（二选一）** | **`--ris-arch baseline`**：`ClipTextGuidedRIS`，CLIP 句向量 + 轻量图像编码 + 解码。**`--ris-arch v33`**：`ClipRISV33`（文档 §3.3）：空间位置残差、**token 级**文本特征、像素–token 跨模态注意力 + 解码；与 baseline **权重不通用**，须单独训练。 |
-| **权重** | 训练写入 `--save-dir`（默认在 `result/` 下子目录）。`ckpt["args"]` 含 `ris_arch`、`image_size` 等；`eval.py` / `visualize.py` / `system/predict.py` 按 checkpoint 自动构造对应网络。 |
+| **权重** | 训练写入 `--save-dir`（默认在 `result/` 下子目录）。**保存策略与验证 mIoU / cIoU 相关**（见下文「验证指标」）。`ckpt["args"]` 含 `ris_arch`、`image_size` 等；`eval.py` / `visualize.py` / `system/predict.py` 按 checkpoint 自动构造对应网络。 |
 | **推理** | `python -m streamlit run system/streamlit_app.py`。默认权重路径在 `system/predict.py` 的 `default_checkpoint_path()` 中配置（可按部署修改）。 |
 
 ---
@@ -76,8 +76,24 @@ python train.py `
   --epochs 15
 ```
 
+### 验证指标 mIoU、cIoU 与权重文件
+
+训练过程中，每个 epoch 结束会在**验证集**上计算两类 IoU（实现见 `utils/metrics.py`，与 `eval.py` 口径一致）：
+
+| 指标 | 含义（验证集） |
+|------|----------------|
+| **mIoU**（`val_mIoU`） | **逐样本 IoU** 的算术平均：先对每张图算预测与真值的 IoU，再对所有样本取平均。更能反映「每张图是否都分得好」。 |
+| **cIoU**（`val_cIoU`） | **累积 IoU**：把整个验证集上所有样本的前景 **交集像素总数 / 并集像素总数**，等价于「全集当作一张大图」的 IoU，大目标权重更高。 |
+
+**与权重保存的关系：**
+
+- **`<save-dir>/val_metrics.jsonl`**：每轮追加一行 JSON，含该轮的 `val_mIoU`、`val_cIoU`、`val_loss` 以及训练侧 `train_loss`、`train_iou_batch_mean` 等，便于画曲线或对比实验。
+- **`best.pt`**：当本轮 **`val_mIoU` 高于历史最佳** 时覆盖写入（**不以 cIoU 单独作为选优标准**）；checkpoint 内同时记录当时的 **`best_val_miou`**、**`best_val_ciou`**（便于对照「mIoU 最佳那一轮」上的 cIoU），以及 `epoch`、`args` 等。
+- **`last.pt`**：每个 epoch 结束都会更新，用于中断后从上一轮整轮结束处 **`--resume`** 续训。
+
+推理或部署时一般选用 **`best.pt`**（验证 mIoU 最优）；若更关心全集像素级重合，可结合 `val_metrics.jsonl` 查看各轮 cIoU 再人工选轮次对应的 `last.pt`（需自行保留或从日志推断）。
+
 - **续训**：`--resume path\to\last.pt`，并显式指定 **`--save-dir`** 与首次训练一致。
-- **指标**：每轮验证 **mIoU**、**cIoU** 写入 `<save-dir>/val_metrics.jsonl`；验证 mIoU 提升时更新 **`best.pt`**，每轮结束写 **`last.pt`**。
 
 ---
 
@@ -161,4 +177,4 @@ python tools/build_refcoco_index.py `
 
 ## English summary
 
-**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
+**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Training logs per-epoch **mIoU** (mean of per-image IoU) and **cIoU** (cumulative intersection-over-union); **`best.pt` is chosen by validation mIoU**, with `best_val_ciou` stored for reference. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
