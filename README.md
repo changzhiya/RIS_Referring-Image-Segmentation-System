@@ -98,15 +98,18 @@ python train.py `
 ### 多次训练对比（验证集 val_mIoU / val_cIoU）
 
 下表为**同一验证集**（RefCOCO `val`）上，多次不同配置训练的汇总：在各自 `result/<save-dir>/val_metrics.jsonl` 中，取 **`val_mIoU` 的全局最大值**，并列出**该轮**对应的 **`val_cIoU`** 与 **epoch**（与 `best.pt` 选优规则一致）。  
+
+**「配置要点」对比维度**：分割头 **baseline / v33**、输入 **224² / 256²**、是否 **AMP**、**梯度累积**步数、**损失权重**（BCE / Dice / soft-IoU）、**学习率**（头 / CLIP）、**CLIP 文本解冻层数**、以及**计划 epoch 数**（与表中「最佳出现轮」不同）。要点来自各目录 `best.pt` 内 `args` 与 `train.py` 预设说明。  
+
 *说明：数值随数据路径、随机种子与硬件略有波动；换机复现时请以你本地的 `val_metrics.jsonl` 为准，下表仅作配置对比参考。*
 
-| 保存目录 `result/...` | 配置要点（见 `train.py`） | 验证最佳 val_mIoU | 该轮 val_cIoU | epoch |
-|----------------------|---------------------------|-------------------:|---------------:|------:|
-| `checkpoints_active` | 默认 `save-dir`（如 256²、baseline、默认损失等） | **0.2632** | 0.2818 | 14 |
-| `checkpoints_doc31` | `--doc-stage1`（224²、文档 3.1 阶段一预设：AMP、余弦、BCE+Dice+softIoU 等） | **0.2405** | 0.2655 | 8 |
-| `checkpoints_miou10_20260414_215059` | `--preset-early-val-miou`（抬高早期 val mIoU 的预设，独立时间戳目录） | **0.2629** | 0.2733 | 7 |
-| `checkpoints_retrain` | `checkpoints_retrain` 一次重训 / 续训实验 | **0.2479** | 0.2758 | 5 |
-| `checkpoint_v2` | 主实验目录（与下文 **评估示例** 中 `.\result\checkpoint_v2\best.pt` 对应；指标来源：`result\checkpoint_v2\val_metrics.jsonl`） | **0.4112** | 0.4098 | 9 |
+| 保存目录 `result/...` | 配置要点（差异一览） | 验证最佳 val_mIoU | 该轮 val_cIoU | epoch |
+|----------------------|----------------------|-------------------:|---------------:|------:|
+| `checkpoints_active` | **baseline**；**256²**；无 AMP；`grad_accum=8`；头 LR **3e-4**、CLIP **5e-6**；解冻文本末 **1** 层；**默认** BCE+Dice（无 soft-IoU）；默认 `save-dir`，**计划 15 epoch**（偏「长训 + 稳显存」） | **0.2632** | 0.2818 | 14 |
+| `checkpoints_doc31` | **baseline**；**224²**（更小输入省显存）；**AMP 开**；`accum=4`；头/CLIP 均为 **5e-5**；解冻末 **2** 层；**`--doc-stage1`**：损失 **0.5·BCE+0.3·Dice+0.2·softIoU** + 余弦等文档预设；**计划 10 epoch**（偏「文档对齐 + 双端同 LR」） | **0.2405** | 0.2655 | 8 |
+| `checkpoints_miou10_20260414_215059` | **baseline**；**256²**；**AMP 开**；`accum=4`；头 **8e-5**、CLIP **2e-5**；解冻 **1** 层；**`--preset-early-val-miou`**：损失 **0.15·BCE+0.45·Dice+0.40·softIoU** + 更强裁剪（如 scale≥0.88）；时间戳独立目录（偏「抬早期 val mIoU」） | **0.2629** | 0.2733 | 7 |
+| `checkpoints_retrain` | **baseline**；**224²**（与 active 的 256 不同，与 doc31 同分辨率）；无 AMP；`accum=8`；LR 与 **active 同档**（3e-4 / 5e-6）；解冻 **1** 层；**仅计划 5 epoch** 的短训/重训实验（总监督步数明显少于 active） | **0.2479** | 0.2758 | 5 |
+| `checkpoint_v2` | **ClipRISV33（`--ris-arch v33`）**：在 baseline 之外增加 **位置编码模块**（图像特征上的可学习空间位置残差）与 **细粒度文本特征提取模块**（CLIP 文本 **token 级** 表征 + 像素–token 跨模态注意力，而非仅用句向量）；与上表其余 **baseline** 权重不通用；**256²**；无 AMP；`accum=8`；LR 与 active 同档；解冻 **1** 层；**默认** BCE+Dice；**主实验**（与下文 eval 示例 `best.pt` 一致，`val_metrics.jsonl` 见该目录） | **0.4112** | 0.4098 | 9 |
 
 ---
 
