@@ -1,7 +1,7 @@
 """
-one.docx §3.3：空间位置感知 + CLIP 文本 token 级特征 + 轻量跨模态注意力（独立分支，需单独训练）。
+v33 分割头：空间位置编码 + CLIP 文本逐 token 特征 + 轻量跨模态注意力；需单独训练，与 baseline 权重不通用。
 
-与 ClipTextGuidedRIS 不共享权重；checkpoint 中 args.ris_arch == \"v33\" 时由 predict/eval 加载本结构。
+checkpoint 的 args.ris_arch 为 v33 时，predict / eval / visualize 应加载本模块。
 """
 from __future__ import annotations
 

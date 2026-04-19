@@ -1,6 +1,10 @@
+"""
+在指定划分上评估已保存的 RIS 权重：加载 checkpoint 中的 ris_arch / clip 配置，输出 mIoU、cIoU 等。
+"""
 import argparse
 import json
 import os
+import sys
 from typing import Dict, List, Tuple
 
 import clip
@@ -13,6 +17,11 @@ from data.refcoco_dataset import RefCOCOIndexDataset
 from models.clip_ris import ClipTextGuidedRIS
 from models.clip_ris_v33 import ClipRISV33
 from utils.metrics import accumulate_miou_ciou
+
+
+def _default_num_workers() -> int:
+    # 与 train 一致：Windows 上多进程 DataLoader 易与 CUDA 冲突
+    return 0 if sys.platform == "win32" else 4
 
 
 def dice_loss(logits: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -86,7 +95,12 @@ def build_parser():
     )
     p.add_argument("--checkpoint", type=str, required=True)
     p.add_argument("--batch-size", type=int, default=8)
-    p.add_argument("--num-workers", type=int, default=4)
+    p.add_argument(
+        "--num-workers",
+        type=int,
+        default=_default_num_workers(),
+        help="DataLoader 进程数；Windows 默认 0，Linux 默认 4",
+    )
     p.add_argument("--image-size", type=int, default=224, help="须与训练时 --image-size 一致（256 实验需显式指定）")
     p.add_argument("--clip-model", type=str, default="ViT-B/32")
     p.add_argument("--save-json", type=str, default="", help="Write metrics JSON to this path")

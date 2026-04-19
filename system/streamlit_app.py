@@ -1,5 +1,5 @@
 """
-文本引导图像语义分割 — Streamlit 界面（the_one.docx UI + second.docx 中文指代）。
+文本引导指代图像分割 — Streamlit 交互界面（含中文指代与离线翻译）。
 
 在项目根目录执行:
   pip install -r system/requirements-demo.txt
@@ -14,7 +14,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import List, Tuple
 
 from PIL import Image
 
@@ -100,15 +100,16 @@ def _run_infer(*, thr_only: bool = False) -> None:
         return
     thr = float(st.session_state.get("thr", 0.55))
     lang = str(st.session_state.get("lang_mode") or "中文（离线翻译）")
+    # 阈值实时刷新时复用同一句话的英译，避免重复跑 CPU 翻译
     try:
-        if thr_only:
-            cached_raw = st.session_state.get("_last_infer_raw")
-            cached_en = st.session_state.get("_last_infer_en")
-            if cached_raw == raw and cached_en:
-                en = str(cached_en)
-                note = st.session_state.get("_last_infer_note")
-            else:
-                en, note = zh_translate.resolve_for_clip(raw, lang)
+        reuse = (
+            thr_only
+            and st.session_state.get("_last_infer_raw") == raw
+            and st.session_state.get("_last_infer_en")
+        )
+        if reuse:
+            en = str(st.session_state.get("_last_infer_en"))
+            note = st.session_state.get("_last_infer_note")
         else:
             en, note = zh_translate.resolve_for_clip(raw, lang)
     except Exception as e:
@@ -117,8 +118,6 @@ def _run_infer(*, thr_only: bool = False) -> None:
     st.session_state["clip_note"] = note
     model, device, image_size, meta = cached_bundle(ckpt)
     t0 = time.perf_counter()
-    lt = float(st.session_state.get("ris_logit_temp", 1.0))
-    kcc = bool(st.session_state.get("ris_keep_largest_cc", False))
     overlay, mask, info = predict.run_segmentation(
         model,
         device,
@@ -126,8 +125,6 @@ def _run_infer(*, thr_only: bool = False) -> None:
         pil,
         en,
         thr,
-        logit_temperature=lt,
-        keep_largest_cc=kcc,
     )
     st.session_state["overlay"] = overlay
     st.session_state["mask"] = mask
@@ -227,7 +224,7 @@ def _inject_ui_styles() -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="文本引导图像语义分割系统",
+        page_title="文本引导指代图像分割系统",
         layout="wide",
         initial_sidebar_state="expanded",
     )
@@ -249,19 +246,17 @@ def main() -> None:
     if "live_thr" not in st.session_state:
         st.session_state.live_thr = True
     st.session_state.setdefault("lang_mode", "中文（离线翻译）")
-    st.session_state.setdefault("ris_logit_temp", 1.0)
-    st.session_state.setdefault("ris_keep_largest_cc", False)
 
-    st.title("文本引导图像语义分割原型系统")
+    st.title("文本引导指代图像分割系统")
     _ckpt_warn = str(st.session_state.get("ckpt_path") or "").strip()
     if not _ckpt_warn or not os.path.isfile(_ckpt_warn):
         st.warning(
-            "未检测到可用的 `result/**/best.pt`。请先在侧栏「模型权重路径」填写本地训练得到的 `.pt`，"
-            "或在项目根目录运行 `python train.py ...` 生成权重后再加载。"
+            "未找到有效权重文件。请在侧栏「模型权重路径」填写 `best.pt` / `last.pt`，"
+            "或在 `system/predict.py` 中配置 `default_checkpoint_path()` 后重开页面。"
         )
     st.divider()
 
-    # —— 左侧控制面板（the_one 3.1.1）——
+    # —— 左侧控制面板 ——
     with st.sidebar:
         st.header("控制面板")
 
@@ -282,8 +277,7 @@ def main() -> None:
                 with st.spinner("正在加载模型权重..."):
                     try:
                         cached_bundle.clear()
-                        m = cached_bundle(str(st.session_state.ckpt_path))
-                        st.session_state["_warm"] = m
+                        cached_bundle(str(st.session_state.ckpt_path))
                     except Exception as e:
                         st.error(f"加载失败: {e}")
                     else:
@@ -326,7 +320,7 @@ def main() -> None:
         st.text_input(
             "指代表达",
             placeholder="中文例：左边的男人 / 英文例：the man on the left",
-            help="second.docx：词典优先，其次 Helsinki-NLP 中译英",
+            help="中文：词典优先，其次 Helsinki-NLP 中译英再送 CLIP",
             key="expr",
         )
 
@@ -347,23 +341,8 @@ def main() -> None:
             on_change=_on_thr_change if st.session_state.live_thr else None,
         )
 
-        st.subheader("推理增强（one.docx）")
-        st.slider(
-            "Logit 锐化温度",
-            min_value=0.45,
-            max_value=1.0,
-            step=0.05,
-            key="ris_logit_temp",
-            help="小于 1 时放大 logits，前景更「硬」，有时可减轻左右粘连；为 1 表示关闭（与训练分布一致）。",
-        )
-        st.checkbox(
-            "仅保留最大连通域",
-            key="ris_keep_largest_cc",
-            help="去掉小碎片；多目标粘连时可能误删次要区域，按需开启。",
-        )
-
         st.divider()
-        st.subheader("快速演示（答辩）")
+        st.subheader("快速演示")
         presets = _load_demo_presets()
         if len(presets) >= 2:
             dc1, dc2 = st.columns(2)
@@ -481,23 +460,21 @@ def main() -> None:
     with st.expander("系统说明", expanded=False):
         st.write(
             """
-本系统为文本引导指代分割（RIS）最小原型：CLIP 文本编码 + 轻量图像编码器 + 解码头。
-默认权重自动选择 `result/**/best.pt`（优先名称含 v33；可在侧栏修改路径）。
-实际验证指标以训练生成的 `val_metrics.jsonl` 为准；界面「best mIoU」为保存 checkpoint 时的记录值。
+本系统为文本引导指代图像分割（RIS）：CLIP 文本编码与可配置分割头，推理与训练共用同一归一化与权重格式。
+默认权重路径由 `system/predict.py` 中配置决定（可在侧栏修改 `best.pt` / `last.pt` 路径）。
+验证指标以训练生成的 `val_metrics.jsonl` 为准；界面「best mIoU」为保存 checkpoint 时的记录值。
 
-中文指代（second.docx）：在「中文（离线翻译）」模式下，含汉字的句子会先经词典 / Helsinki-NLP opus-mt-zh-en
-译为英文再送入 CLIP，翻译在 CPU 运行。首次使用需 `pip install -r system/requirements-demo.txt` 并联网下载模型；
-答辩完全离线：若存在与「项目根」同级的 `train/` 且内含 `pytorch_model.bin`，应用启动时会自动
-`setdefault(ZH_EN_MT_MODEL, …)` 指向该目录（与手动设置 `D:\\...\\test\\train` 等价）。其它约定路径与
-`zh_translate` 说明一致；仅分词、缺权重时会报错提示补全，而不会静默改走外网。
+中文指代：在「中文（离线翻译）」模式下，含汉字的句子会先经词典 / Helsinki-NLP opus-mt-zh-en
+译为英文再送入 CLIP，翻译在 CPU 运行。首次使用需 `pip install -r system/requirements-demo.txt` 并联网下载模型。
+完全离线部署：若存在与「项目根」同级的 `train/` 且内含 `pytorch_model.bin`，应用启动时会自动
+`setdefault(ZH_EN_MT_MODEL, …)` 指向该目录。其它路径约定见 `zh_translate` 模块说明。
 拉取翻译模型时默认使用国内镜像 HF_ENDPOINT=https://hf-mirror.com（若已自行设置 HF_ENDPOINT 则不会覆盖）。
-打开页面时不再自动下载 Marian，避免长时间卡在首屏；需要中文机翻时请侧栏点「预加载中译英模型」，或在首次「运行分割」时等待下载完成（默认单次下载超时 300 秒，见 zh_translate 中 HF_HUB_DOWNLOAD_TIMEOUT）。
+打开页面时不再自动下载 Marian；需要中文机翻时请侧栏点「预加载中译英模型」，或在首次「运行分割」时等待下载完成（默认单次下载超时 300 秒，见 zh_translate）。
 
 卡顿说明：Marian 在 CPU 上比英文 tokenize 慢得多；若开启「阈值拖动时实时刷新」，同一句话下仅会翻译一次，后续拖动复用译文。
 默认贪心解码（较快）；要更高翻译质量可设环境变量 ZH_EN_MT_NUM_BEAMS=3（会更慢）。
 
-one.docx：侧栏「推理增强」对应推理阶段（不改 checkpoint）；环境变量 RIS_LOGIT_TEMP、RIS_KEEP_LARGEST_CC 与界面一致。
-中文左右/性别类短语可在 zh_translate.CUSTOM_TRANSLATION 中写死英文约束（文档 3.1.3）；更深结构见 models/clip_ris.py 顶部说明（需重训）。
+自定义短语映射可在 `zh_translate.CUSTOM_TRANSLATION` 中维护；网络结构见 `models/clip_ris.py`、`models/clip_ris_v33.py`。
             """.strip()
         )
 

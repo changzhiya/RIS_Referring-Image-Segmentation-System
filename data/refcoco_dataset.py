@@ -1,3 +1,4 @@
+"""RefCOCO 风格索引数据集：按 JSON 加载图像、掩码与文本，CLIP 归一化与可选同步数据增强。"""
 import json
 import os
 import random

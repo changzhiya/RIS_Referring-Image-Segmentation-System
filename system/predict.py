@@ -1,14 +1,14 @@
 """
-单图 + 文本推理：与训练/评估一致的 CLIP 归一化与模型构造。
-与训练代码分离，仅依赖 ris_mvp 根目录下的 models/utils；权重默认在 result/ 下。
+推理入口：单图 + 文本 → 分割掩码。
 
-修改阈值、叠图颜色、默认权重路径等：编辑本文件即可；Gradio/Streamlit 在同级目录。
+- 与 train/eval 共用 CLIP 图像归一化与同一套模型构造逻辑（见 load_model_bundle）。
+- 依赖项目根下 models/、utils/；Streamlit 通过本模块加载权重并调用 run_segmentation。
+- 默认权重：下方 _DEFAULT_CKPT_FIXED 或 result/ 下自动搜索，可按部署修改。
 """
 from __future__ import annotations
 
 import os
 import sys
-from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -41,9 +41,19 @@ from utils.clip_finetune import unfreeze_clip_text_last_blocks  # noqa: E402
 _CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
 _CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
 
+# 部署默认权重（存在则优先；否则 result/checkpoint_v2、再否则 result 下自动搜索）
+_DEFAULT_CKPT_FIXED = Path(
+    r"D:\NVIDIA GPU Computing Toolkit\CUDA\test\ris_mvp\RIS_Referring-Image-Segmentation-System\result\checkpoint_v2\best.pt"
+)
+
 
 def default_checkpoint_path() -> str:
-    """在 result/**/best.pt 中自动选一个（优先名称含 v33、否则取最近修改）；无权重时返回空串。"""
+    """默认权重路径：固定部署路径 → 项目根 result/checkpoint_v2 → result/**/best.pt（优先 v33）。"""
+    if _DEFAULT_CKPT_FIXED.is_file():
+        return str(_DEFAULT_CKPT_FIXED.resolve())
+    rel_v2 = _RIS_ROOT / "result" / "checkpoint_v2" / "best.pt"
+    if rel_v2.is_file():
+        return str(rel_v2.resolve())
     result = _RIS_ROOT / "result"
     if not result.is_dir():
         return ""
@@ -67,7 +77,7 @@ def _image_transform(image_size: int) -> transforms.Compose:
 
 
 def _build_ris_from_ckpt_args(clip_model, args_dict: Dict[str, Any], device: str) -> nn.Module:
-    """根据 checkpoint 内 args 选择 baseline ClipTextGuidedRIS 或 one.docx 3.3 的 ClipRISV33。"""
+    """据 ckpt['args']['ris_arch'] 构建 ClipTextGuidedRIS（baseline）或 ClipRISV33（v33）。"""
     arch = str(args_dict.get("ris_arch", "baseline")).lower()
     unfreeze_last = int(args_dict.get("clip_unfreeze_last", 0))
     clip_trainable = unfreeze_last > 0
@@ -145,50 +155,10 @@ def logits_to_mask_array(
     logits: torch.Tensor,
     threshold: float = 0.5,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    """sigmoid 后按阈值二值化；返回 (概率图 HW, uint8 掩码 0/255)。"""
     prob = torch.sigmoid(logits)[0, 0].float().cpu().numpy()
     m = (prob >= float(threshold)).astype(np.uint8) * 255
     return prob, m
-
-
-def _apply_logit_temperature(logits: torch.Tensor, temperature: float) -> torch.Tensor:
-    """one.docx 推理增强：T<1 时放大 logits，使 sigmoid 更尖锐（不改网络权重）。"""
-    t = float(temperature)
-    if t >= 1.0 - 1e-9:
-        return logits
-    t = max(t, 1e-3)
-    return logits / t
-
-
-def _keep_largest_connected_component(mask_u8: np.ndarray) -> np.ndarray:
-    """二值 mask 只保留最大 4-连通域，抑制小碎片与部分误激活（纯 numpy）。"""
-    m = (mask_u8 >= 128).astype(np.uint8)
-    if int(m.sum()) == 0:
-        return mask_u8
-    h, w = m.shape
-    visited = np.zeros((h, w), dtype=np.uint8)
-    best: list[tuple[int, int]] = []
-    best_n = 0
-    for y in range(h):
-        for x in range(w):
-            if m[y, x] == 0 or visited[y, x]:
-                continue
-            q: deque[tuple[int, int]] = deque([(y, x)])
-            visited[y, x] = 1
-            comp: list[tuple[int, int]] = []
-            while q:
-                cy, cx = q.popleft()
-                comp.append((cy, cx))
-                for ny, nx in (cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1):
-                    if 0 <= ny < h and 0 <= nx < w and m[ny, nx] and not visited[ny, nx]:
-                        visited[ny, nx] = 1
-                        q.append((ny, nx))
-            if len(comp) > best_n:
-                best_n = len(comp)
-                best = comp
-    out = np.zeros((h, w), dtype=np.uint8)
-    for cy, cx in best:
-        out[cy, cx] = 255
-    return out
 
 
 def overlay_mask(
@@ -217,30 +187,10 @@ def run_segmentation(
     pil_image: Image.Image,
     text: str,
     threshold: float = 0.5,
-    *,
-    logit_temperature: Optional[float] = None,
-    keep_largest_cc: Optional[bool] = None,
 ) -> Tuple[Image.Image, Image.Image, str]:
-    """logit_temperature / keep_largest_cc：one.docx 推理阶段增强；未传则从环境变量读取。"""
-    lt = (
-        float(logit_temperature)
-        if logit_temperature is not None
-        else float(os.environ.get("RIS_LOGIT_TEMP", "1.0"))
-    )
-    klcc = (
-        bool(keep_largest_cc)
-        if keep_largest_cc is not None
-        else (os.environ.get("RIS_KEEP_LARGEST_CC", "").strip().lower() in ("1", "true", "yes"))
-    )
-
+    """单尺度推理：sigmoid 阈值化得到掩码与叠图。"""
     logits = predict_mask_logits(model, device, image_size, pil_image, text)
-    logits = _apply_logit_temperature(logits, lt)
-    prob, mask_u8 = logits_to_mask_array(logits, threshold)
-    if klcc:
-        mask_u8 = _keep_largest_connected_component(mask_u8)
+    _prob, mask_u8 = logits_to_mask_array(logits, threshold)
     overlay = overlay_mask(pil_image, mask_u8)
-    info = (
-        f"image_size={image_size}, thr={threshold:.2f}, logit_temp={lt:.2f}, "
-        f"largest_cc={int(klcc)}, fg_ratio={(mask_u8 > 0).mean():.4f}"
-    )
+    info = f"image_size={image_size}, thr={threshold:.2f}, fg_ratio={(mask_u8 > 0).mean():.4f}"
     return overlay, mask_to_pil(mask_u8), info

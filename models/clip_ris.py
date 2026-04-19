@@ -1,8 +1,8 @@
 """
-CLIP 文本引导的轻量 RIS（MVP）。
+CLIP 文本引导的指代图像分割骨干（轻量图像编码 + 解码头）。
 
-one.docx 第 3 阶段（空间位置编码、细粒度 token 文本编码、跨模态注意力等）需改张量形状与 CLIP 接口，
-并重新训练；当前仓库保持与已有 checkpoint 兼容，推理侧增强见 system/predict.py（温度 / 最大连通域）。
+更复杂的结构（空间编码、token 级文本、跨模态注意力等）见 `clip_ris_v33.ClipRISV33`，须单独训练；
+本文件为 baseline，与历史 `ris_arch=baseline` 的 checkpoint 兼容。
 """
 import torch
 import torch.nn as nn
@@ -21,7 +21,7 @@ class TinyImageEncoder(nn.Module):
     """轻量卷积图像编码器。
 
     作用：从输入 RGB 图像提取中等分辨率的稠密特征图，作为分割支路的视觉表示。
-    不使用 CLIP 视觉塔，以降低显存占用并加快训练，适合毕设/MVP 快速验证。
+    不使用 CLIP 视觉塔，以降低显存占用并加快训练迭代。
     输出通道数与文本投影维度一致，便于后续与句子向量逐像素对齐。
     """
 
@@ -44,7 +44,7 @@ class TinyImageEncoder(nn.Module):
 
 
 class ClipTextGuidedRIS(nn.Module):
-    """CLIP 文本引导的指代表达图像分割模型（RIS 最小实现）。
+    """CLIP 文本引导的指代图像分割模型（RIS 基线结构）。
 
     作用：根据自然语言描述，在图像上预测对应目标区域的二值分割 mask。
     - 文本侧：冻结的 CLIP encode_text 得到句子嵌入，经线性层映射到与图像特征相同的通道维，

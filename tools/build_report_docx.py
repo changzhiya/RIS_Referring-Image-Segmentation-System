@@ -41,7 +41,7 @@ def main():
     doc.add_heading("一、任务与工程说明", level=1)
     doc.add_paragraph(
         "本实验在 RefCOCO 标注与 COCO train2014 图像上，使用 PyTorch 与 CLIP 文本编码器实现指代表达分割（"
-        "Referring Image Segmentation, RIS）的最小可用基线。训练采用 BCE + Dice 损失，验证与测试统计 mean IoU "
+        "Referring Image Segmentation, RIS）实验系统。训练采用 BCE + Dice 损失，验证与测试统计 mean IoU "
         "（逐 batch 均值，与 train.py 中验证口径一致）。"
     )
 

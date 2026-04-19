@@ -1,3 +1,6 @@
+"""
+从索引 JSON 随机抽样，将指代分割预测与原图/GT 叠加导出到目录（用于定性检查 checkpoint）。
+"""
 import argparse
 import json
 import os

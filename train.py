@@ -1,3 +1,6 @@
+"""
+RefCOCO 指代图像分割训练入口：支持 baseline 与 v33 结构，含 AMP、梯度累积与可选 CLIP 文本末层微调。
+"""
 import argparse
 import json
 import os
@@ -288,7 +291,7 @@ def _apply_doc_cuda_env() -> None:
 
 
 def build_args():
-    parser = argparse.ArgumentParser("Minimal RefCOCO RIS training")
+    parser = argparse.ArgumentParser("RefCOCO 指代图像分割训练")
     parser.add_argument("--data-root", type=str, required=True, help="Root dir containing images/masks folders")
     parser.add_argument("--train-index", type=str, required=True, help="Train split index JSON path")
     parser.add_argument("--val-index", type=str, required=True, help="Val split index JSON path")
@@ -396,7 +399,7 @@ def build_args():
         type=str,
         default="baseline",
         choices=("baseline", "v33"),
-        help="分割头结构：baseline=原 ClipTextGuidedRIS；v33=one.docx§3.3（空间+token 跨模态），须单独训练，与旧 .pt 不兼容",
+        help="分割头：baseline=ClipTextGuidedRIS；v33=空间编码+文本 token 跨模态注意力（须单独训练，与旧权重不兼容）",
     )
     return parser.parse_args()
 
@@ -512,7 +515,7 @@ def main():
             clip_model=clip_model,
             clip_text_trainable=clip_trainable,
         ).to(device)
-        print("[ris-arch] ClipRISV33 (one.docx §3.3: spatial + token cross-attn)", flush=True)
+        print("[ris-arch] ClipRISV33（空间位置 + 文本 token 跨模态）", flush=True)
     else:
         model = ClipTextGuidedRIS(
             clip_model=clip_model,
@@ -666,21 +669,14 @@ def main():
             or (epoch % args.epoch_report_interval == 0)
             or (epoch == args.epochs)
         )
+        lr_suffix = f" | lr={lr_head:.2e}" if scheduler is not None else ""
         if do_report:
-            if scheduler is not None:
-                print(
-                    f"[{ts}] Epoch {epoch:02d}/{args.epochs} | "
-                    f"train_loss={tr_loss:.4f} train_iou={tr_iou:.4f} | "
-                    f"val_loss={va_loss:.4f} val_mIoU={va_miou:.4f} val_cIoU={va_ciou:.4f} | lr={lr_head:.2e}",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"[{ts}] Epoch {epoch:02d}/{args.epochs} | "
-                    f"train_loss={tr_loss:.4f} train_iou={tr_iou:.4f} | "
-                    f"val_loss={va_loss:.4f} val_mIoU={va_miou:.4f} val_cIoU={va_ciou:.4f}",
-                    flush=True,
-                )
+            print(
+                f"[{ts}] Epoch {epoch:02d}/{args.epochs} | "
+                f"train_loss={tr_loss:.4f} train_iou={tr_iou:.4f} | "
+                f"val_loss={va_loss:.4f} val_mIoU={va_miou:.4f} val_cIoU={va_ciou:.4f}{lr_suffix}",
+                flush=True,
+            )
         else:
             print(
                 f"[{ts}] Epoch {epoch:02d}/{args.epochs} done "

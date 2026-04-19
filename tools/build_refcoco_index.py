@@ -11,7 +11,7 @@ from pycocotools import mask as mask_utils
 
 
 def parse_args():
-    parser = argparse.ArgumentParser("Convert official RefCOCO annotations to RIS MVP index format")
+    parser = argparse.ArgumentParser("Convert official RefCOCO annotations to RIS index JSON format")
     parser.add_argument(
         "--dataset-dir",
         type=str,

@@ -1,5 +1,5 @@
 """
-中文指代表达 -> 英文（CLIP）离线翻译层（second.docx 方案）。
+中文指代表达 → 英文（CLIP）离线翻译层：Marian 中译英 + 本地快照优先。
 - 默认 Helsinki-NLP/opus-mt-zh-en，CPU 推理，不占 GPU。
 - 本地快照按顺序查找（须含 config.json + pytorch_model.bin 或 model.safetensors）：
   1) ris_mvp/models/opus-mt-zh-en
@@ -74,7 +74,7 @@ def describe_mt_resolution() -> str:
         )
     return "Marian 来源：尚未配置完整本地目录，首次机翻将从镜像拉取 Helsinki-NLP/opus-mt-zh-en。"
 
-# 文档 4.2 / one.docx 3.1.3：自定义映射优先；对左右、性别等加显式英文约束，减轻机翻歧义。
+# 答辩/演示用：自定义短语优先于机翻；对左右、颜色等写死英文，减轻 Marian 歧义。
 CUSTOM_TRANSLATION: Dict[str, str] = {
     "穿黑色衣服的人": "a person in black clothes",
     "戴眼镜的女人": "a woman wearing glasses",
@@ -86,7 +86,7 @@ CUSTOM_TRANSLATION: Dict[str, str] = {
     "右边的背包": "the backpack on the RIGHT side of the image, not the left",
     "黑色的背包": "the black backpack",
     "穿蓝色衬衫的女士": "the lady with the blue shirt",
-    "站着的人": "person standing u",
+    "站着的人": "person standing up",
 }
 
 _MT: Optional[Tuple[Any, Any]] = None
