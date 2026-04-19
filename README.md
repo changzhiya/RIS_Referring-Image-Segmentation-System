@@ -149,7 +149,43 @@ cd <本仓库根目录>
 streamlit run system/streamlit_app.py
 ```
 
-浏览器访问终端提示的 **Local URL**（一般为 `http://localhost:8501`）。侧栏可更换 **模型权重路径**、上传图像、输入指代表达（支持中文离线翻译流程，见 `system/zh_translate.py`）。
+浏览器访问终端提示的 **Local URL**（一般为 `http://localhost:8501`）。侧栏可更换 **模型权重路径**、上传图像、输入指代表达。
+
+### 中文指代与离线翻译（实现说明）
+
+CLIP 文本塔面向**英文**分布训练，界面若输入**中文指代**，需先变成英文再 `clip.tokenize` 送入分割模型。本系统在 **`system/zh_translate.py`** 中实现离线翻译层，并由 **`system/streamlit_app.py`** 在推理前调用。  
+
+**具体机翻模型**：采用 **Helsinki-NLP** 在 Hugging Face 上发布的 **中英翻译模型** **[Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)**（Opus-MT 系列，**中文 → 英文** 方向）；实现上为 Marian 序列到序列结构，经 `transformers` 加载，默认在 **CPU** 推理。
+
+**1. 总体数据流**
+
+- 用户在侧栏选择 **「语言模式」**（`lang_mode`）：**英文（CLIP 原生）** 或 **中文（离线翻译）**。
+- 推理函数根据当前文本调用 **`zh_translate.resolve_for_clip(原文, lang_mode)`**，得到 **`(送入 CLIP 的英文, 可选说明文案)`**；分割与可视化均基于该英文句。
+
+**2. 译文从哪里来（优先级从高到低）**
+
+| 步骤 | 行为 |
+|------|------|
+| ① 词典 | 若原文整句命中 **`CUSTOM_TRANSLATION`**（`zh_translate.py` 内字典），**直接使用固定英文**，不调用神经网络（答辩演示更稳、无延迟）。 |
+| ② Marian 机翻 | 否则调用上述 **Helsinki-NLP 中英（zh→en）翻译模型** `opus-mt-zh-en`（Marian），经 **`transformers`** 在 **CPU** 上 `generate` 得到英文；**不占 GPU**，避免与分割抢显存。 |
+| ③ 何时机翻 | **「中文（离线翻译）」**：输入中含汉字则走 ①/②；**「英文（CLIP 原生）」**：仅当检测到汉字时才自动机翻（混合输入场景）。纯英文则原样送入 CLIP。 |
+
+**3. Helsinki-NLP 中英翻译模型如何加载**
+
+- **环境变量 `ZH_EN_MT_MODEL`**：若设为某目录路径，则**优先**从该目录加载快照（须含 `config.json` 与 `pytorch_model.bin` 或 `model.safetensors`）。
+- **否则**按顺序查找项目内约定目录（**第一个完整快照即用**）：`<项目根>/models/opus-mt-zh-en/` → `<项目根>/train/` → **上一级目录**的 `train/`（便于与历史权重目录并存）。
+- 若某约定目录**只有 config、缺权重**，模块会**报错提示补全**，避免误连外网；无本地完整快照时，回退为从 Hub 拉取同一 **`Helsinki-NLP/opus-mt-zh-en`** 权重（代码中默认设置 **`HF_ENDPOINT`** 镜像与下载超时，见 `zh_translate._load_mt`）。
+- **预加载**：Streamlit 侧栏可调用 **`zh_translate.warmup_mt()`**，把 **Helsinki-NLP opus-mt-zh-en** 提前载入内存；界面也会展示 **`describe_mt_resolution()`** 的文案，说明当前将从何处加载。
+
+**4. 机翻质量与性能**
+
+- 默认 **`ZH_EN_MT_NUM_BEAMS=1`**（贪心解码），减轻拖动阈值时重复推理的卡顿；需要更高质量可在环境中设为 **`3`** 等开启 beam。
+- 同一句话、仅改分割阈值时，应用层可**缓存译文**，避免重复跑 **opus-mt-zh-en**（具体见 `streamlit_app.py` 中推理与 `thr_only` 相关逻辑）。
+
+**5. 依赖与离线部署**
+
+- 需安装 **`system/requirements-demo.txt`** 中的 **`transformers`**、**`sentencepiece`**、**`sacremoses`** 等。
+- 可将模型快照下载到 **`models/opus-mt-zh-en/`**（仓库 **`.gitignore` 已忽略** 该目录，避免大文件进 Git）；或使用仓库内 **`scripts/download_opus_mt_zh_en.py`** 拉取到该路径。
 
 ---
 
@@ -193,4 +229,4 @@ python tools/build_refcoco_index.py `
 
 ## English summary
 
-**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Training logs per-epoch **mIoU** (mean of per-image IoU) and **cIoU** (cumulative intersection-over-union); **`best.pt` is chosen by validation mIoU**, with `best_val_ciou` stored for reference. A **multi-run comparison table** (best val mIoU / matching cIoU per configuration) is included in the Chinese section above. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
+**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Training logs per-epoch **mIoU** (mean of per-image IoU) and **cIoU** (cumulative intersection-over-union); **`best.pt` is chosen by validation mIoU**, with `best_val_ciou` stored for reference. A **multi-run comparison table** (best val mIoU / matching cIoU per configuration) is included in the Chinese section above. **Chinese referring expressions** are handled offline before CLIP: a **phrase dictionary** then the **Helsinki-NLP Chinese-to-English translation model** **`opus-mt-zh-en`** (Opus-MT / Marian via `transformers`, CPU) in `system/zh_translate.py`, wired from Streamlit through `resolve_for_clip`; details are in the Chinese subsection **「中文指代与离线翻译（实现说明）」** above. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
