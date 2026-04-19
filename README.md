@@ -95,6 +95,19 @@ python train.py `
 
 - **续训**：`--resume path\to\last.pt`，并显式指定 **`--save-dir`** 与首次训练一致。
 
+### 多次训练对比（验证集 val_mIoU / val_cIoU）
+
+下表为**同一验证集**（RefCOCO `val`）上，多次不同配置训练的汇总：在各自 `result/<save-dir>/val_metrics.jsonl` 中，取 **`val_mIoU` 的全局最大值**，并列出**该轮**对应的 **`val_cIoU`** 与 **epoch**（与 `best.pt` 选优规则一致）。  
+*说明：数值随数据路径、随机种子与硬件略有波动；换机复现时请以你本地的 `val_metrics.jsonl` 为准，下表仅作配置对比参考。*
+
+| 保存目录 `result/...` | 配置要点（见 `train.py`） | 验证最佳 val_mIoU | 该轮 val_cIoU | epoch |
+|----------------------|---------------------------|-------------------:|---------------:|------:|
+| `checkpoints_active` | 默认 `save-dir`（如 256²、baseline、默认损失等） | **0.2632** | 0.2818 | 14 |
+| `checkpoints_doc31` | `--doc-stage1`（224²、文档 3.1 阶段一预设：AMP、余弦、BCE+Dice+softIoU 等） | **0.2405** | 0.2655 | 8 |
+| `checkpoints_miou10_20260414_215059` | `--preset-early-val-miou`（抬高早期 val mIoU 的预设，独立时间戳目录） | **0.2629** | 0.2733 | 7 |
+| `checkpoints_retrain` | `checkpoints_retrain` 一次重训 / 续训实验 | **0.2479** | 0.2758 | 5 |
+| `checkpoint_v2` | 主实验目录（与下文 **评估示例** 中 `.\result\checkpoint_v2\best.pt` 对应；指标来源：`result\checkpoint_v2\val_metrics.jsonl`） | **0.4112** | 0.4098 | 9 |
+
 ---
 
 ## 评估与可视化
@@ -177,4 +190,4 @@ python tools/build_refcoco_index.py `
 
 ## English summary
 
-**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Training logs per-epoch **mIoU** (mean of per-image IoU) and **cIoU** (cumulative intersection-over-union); **`best.pt` is chosen by validation mIoU**, with `best_val_ciou` stored for reference. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
+**RIS** pipeline: CLIP text + selectable segmentation head (**baseline** or **v33** cross-modal design), RefCOCO-style JSON indices, training/eval/visualization scripts, and a **Streamlit** UI. Checkpoints record `ris_arch` and `image_size` for correct loading. Training logs per-epoch **mIoU** (mean of per-image IoU) and **cIoU** (cumulative intersection-over-union); **`best.pt` is chosen by validation mIoU**, with `best_val_ciou` stored for reference. A **multi-run comparison table** (best val mIoU / matching cIoU per configuration) is included in the Chinese section above. Large weights and image trees stay under `result/` and `refcoco_ready/{images,masks}/` locally; see **GITHUB_SETUP.md** for Git constraints.
